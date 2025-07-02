@@ -1,41 +1,33 @@
 # Cloudflare WARP Endpoint Finder
 
-A fast, parallel Bash script to find the 4 best (lowest ping) Cloudflare WARP endpoints across all major global IPv4 ranges.  
-This tool is particularly useful for users in Iran, but covers all official Cloudflare WARP IPv4 ranges.
+A blazing fast, parallel Bash script to find the **4 best (lowest ping) Cloudflare WARP endpoints** across all major global IPv4 ranges.  
+Perfect for users in Iran and worldwide, covering all official Cloudflare WARP IPv4 blocks.
+
+---
+
+## 🚀 Quick Usage (No Download or Git Clone Needed)
+
+Just run this command in your terminal – no need to download anything or clone the repo!
+
+```bash
+bash <(curl -s https://raw.githubusercontent.com/Shellgate/warp-endpoint/main/best_warp_endpoints.sh)
+```
+
+Or using `wget`:
+
+```bash
+bash <(wget -qO- https://raw.githubusercontent.com/Shellgate/warp-endpoint/main/best_warp_endpoints.sh)
+```
 
 ---
 
 ## Features
 
 - **Scans all major Cloudflare WARP IPv4 ranges** (.0 to .20 of each /24)
-- **Parallel ping testing** for high speed
+- **Super fast parallel ping testing**
 - **Filters endpoints with ping ≤ 20ms**
-- **Displays the top 4 best endpoints** with their ping
-- **Easy to customize**
-
----
-
-## Usage
-
-1. **Download the script:**
-
-   [Direct Link to Script on GitHub](https://github.com/Shellgate/warp-endpoint/blob/main/best_warp_endpoints.sh)
-
-   Or clone the repository:
-   ```bash
-   git clone https://github.com/Shellgate/warp-endpoint.git
-   cd warp-endpoint
-   ```
-
-2. **Make the script executable:**
-   ```bash
-   chmod +x best_warp_endpoints.sh
-   ```
-
-3. **Run the script:**
-   ```bash
-   ./best_warp_endpoints.sh
-   ```
+- **Shows the top 4 best endpoints** with their ping
+- **Easily customizable**
 
 ---
 
@@ -58,12 +50,12 @@ Top 4 Best WARP Endpoints (ping ≤ 20ms):
 
 ## Customization
 
-- **Ranges:**  
-  To scan more IPs or different ranges, edit the `ranges` array in the script.
+- **IP Ranges:**  
+  Edit the `ranges` array inside the script to scan more or fewer IP blocks.
 - **Ping Threshold:**  
-  To change the maximum accepted ping, set the `max_ping` variable.
-- **Parallelism:**  
-  To speed up or slow down the scan (depending on your hardware/network), change the `max_jobs` variable.
+  Change the `max_ping` value in the script to set your own quality limit.
+- **Parallel Jobs:**  
+  Adjust `max_jobs` to control the number of concurrent pings for your system/network.
 
 ---
 
@@ -81,3 +73,5 @@ MIT
 ---
 
 **Made with ❤️ for the open internet.**
+
+[View source code on GitHub](https://github.com/Shellgate/warp-endpoint)
