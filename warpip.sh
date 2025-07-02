@@ -1,12 +1,13 @@
 #!/bin/bash
 
-# Cloudflare WARP Endpoint & Port Finder (Advanced, 2-Stage, Wide Port Scan, Progress Bar)
-# Stage 1: Find the 6 best (lowest latency) endpoints from all major Cloudflare WARP IPv4 ranges.
-# Stage 2: For each of the top 6 IPs, scan a wide range of well-known and commonly open ports to find the best open port with the lowest ping.
-# Output: The best endpoints and their optimal open ports for WARP usage.
+# warpip - Ultimate Cloudflare WARP Endpoint & Port Scanner
+# Finds the best Cloudflare WARP endpoints and real usable open ports, fully automatic.
+# Author: Shellgate
 
-# --------------------------- CONFIGURATION -------------------------------
+set -e
 
+# ----------- CONFIGURATION -------------
+# Main Cloudflare WARP endpoint IP ranges
 ranges=(
   "162.159.192"
   "162.159.193"
@@ -20,18 +21,19 @@ ranges=(
   "188.114.103"
 )
 
-# A wide range of commonly used and relevant ports for Cloudflare, WARP, VPN, and bypassing restrictions
-ports=(
-  443 2408 53 8080 8443 2053 2096 2083 2087 2052 2082 2086 500 3306 143 993 995 587 2525
-  6666 8444 2080 5060 1194 123 8880 8883 8448 5222 5228 3478 1935 10000 65432
-)
+# How many top endpoints to deeply scan
+ip_count=6
 
-max_jobs=64         # Maximum parallel jobs (tune for your hardware)
-max_ping=50         # Max ping for stage 1 (ms)
-ip_count=6          # Number of top IPs to scan ports on
+# How many parallel jobs (tune for your hardware)
+max_jobs=64
 
-# ------------------------ STAGE 1: IP LATENCY SCAN ----------------------
+# Max ping (ms) to be considered "fast" in stage 1
+max_ping=50
 
+# Timeout for port scan in seconds
+port_timeout=0.4
+
+# ----------- STAGE 1: FASTEST IP SELECTION -------------
 tmpfile1=$(mktemp)
 total_ips=$((${#ranges[@]} * 256))
 tested=0
@@ -61,6 +63,7 @@ export -f ping_ip
 export tmpfile1
 export max_ping
 
+echo "[warpip] Stage 1: Scanning all endpoints for fastest ping..."
 for range in "${ranges[@]}"; do
   for i in $(seq 0 255); do
     ip="$range.$i"
@@ -79,72 +82,68 @@ wait
 progress_bar "$total_ips" "$total_ips"
 echo
 
-# Select the top N fastest IPs
 if [[ -s "$tmpfile1" ]]; then
   mapfile -t best_ips < <(sort -k2 -n "$tmpfile1" | head -n${ip_count} | awk '{print $1}')
+  echo "[warpip] Top $ip_count fastest endpoints:"
+  for ip in "${best_ips[@]}"; do echo " - $ip"; done
 else
-  echo "No fast endpoint found."
+  echo "[warpip] No fast endpoint found. Exiting."
   rm -f "$tmpfile1"
   exit 1
 fi
 
-# ---------------- STAGE 2: PORT SCAN ON TOP IPs -------------------------
+# ----------- STAGE 2: FULL PORT SCAN ON BEST IPS -------------
 
-tmpfile2=$(mktemp)
-total_tests=$((${#best_ips[@]} * ${#ports[@]}))
-tested=0
-
-echo -e "\nScanning a wide range of ports on the top $ip_count endpoints..."
-
-# Check if TCP port is open (fast & silent)
-port_open() {
-  ip="$1"
-  port="$2"
-  timeout 0.7 bash -c "</dev/tcp/$ip/$port" 2>/dev/null
-}
-
-# If port is open, log it with ping
-ping_to_port() {
-  ip="$1"
-  port="$2"
-  if port_open "$ip" "$port" ; then
-    ping_time=$(ping -c 1 -W 1 "$ip" 2>/dev/null | grep 'time=' | awk -F'time=' '{print $2}' | awk '{print $1}')
-    if [[ -n "$ping_time" ]]; then
-      ping_int=${ping_time%.*}
-      echo "$ip $port $ping_int" >> "$tmpfile2"
-    fi
-  fi
-}
-
-export -f port_open
-export -f ping_to_port
-export tmpfile2
+echo -e "\n[warpip] Stage 2: Scanning all 65535 TCP ports on top $ip_count endpoints (may take time)..."
 
 for ip in "${best_ips[@]}"; do
-  for port in "${ports[@]}"; do
-    ping_to_port "$ip" "$port" &
-    ((tested++))
-    if (( tested % 10 == 0 || tested == total_tests )); then
-      progress_bar "$tested" "$total_tests"
+  echo -e "\n[warpip] Scanning all ports on $ip ..."
+  tmp_port=$(mktemp)
+  tested_ports=0
+
+  port_scan() {
+    port="$1"
+    timeout "$port_timeout" bash -c "</dev/tcp/$ip/$port" 2>/dev/null && echo "$port" >> "$tmp_port"
+  }
+  export -f port_scan
+  export ip
+  export tmp_port
+  export port_timeout
+
+  for port in $(seq 1 65535); do
+    port_scan "$port" &
+    ((tested_ports++))
+    if (( tested_ports % 200 == 0 || tested_ports == 65535 )); then
+      progress_bar "$tested_ports" 65535
     fi
     while (( $(jobs -r | wc -l) >= max_jobs )); do
-      sleep 0.01
+      sleep 0.003
     done
   done
+  wait
+  progress_bar 65535 65535
+  echo
+
+  if [[ -s "$tmp_port" ]]; then
+    # For each open port, do an extra WARP suitability check (optional: basic handshake/response, but here just ping again for speed)
+    best_port=""
+    best_time=999999
+    while read port; do
+      # Try ping again to see latency (optional: can be skipped for speed)
+      ping_time=$(ping -c 1 -W 1 "$ip" 2>/dev/null | grep 'time=' | awk -F'time=' '{print $2}' | awk '{print $1}')
+      ping_int=${ping_time%.*}
+      if [[ -n "$ping_time" && "$ping_int" -lt "$best_time" ]]; then
+        best_time="$ping_int"
+        best_port="$port"
+      fi
+    done < "$tmp_port"
+    echo "[warpip] $ip - Best open port: $best_port (ping: ${best_time}ms)"
+    echo "[warpip] All open ports on $ip: $(tr '\n' ' ' < "$tmp_port")"
+  else
+    echo "[warpip] $ip - No open ports found."
+  fi
+  rm -f "$tmp_port"
 done
 
-wait
-progress_bar "$total_tests" "$total_tests"
-echo
-
-# Show best open port (lowest ping) for each IP
-echo -e "\nBest Cloudflare WARP Endpoints and Open Ports (from the fastest $ip_count IPs):"
-if [[ -s "$tmpfile2" ]]; then
-  awk '{print $1}' "$tmpfile2" | sort -u | while read ip; do
-    grep "^$ip " "$tmpfile2" | sort -k3 -n | head -n1
-  done | sort -k3 -n | head -n$ip_count | awk '{printf "%-15s %-6s %sms\n", $1, $2, $3}'
-else
-  echo "No open port found on the top $ip_count endpoints."
-fi
-
-rm -f "$tmpfile1" "$tmpfile2"
+rm -f "$tmpfile1"
+echo -e "\n[warpip] Scan complete. Use the best IP:PORT above for your WARP configuration!"
