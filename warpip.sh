@@ -1,9 +1,8 @@
 #!/bin/bash
 
-# Cloudflare WARP Endpoint Finder (Full Range, Silent, Progress Bar)
-# Finds the 4 best (lowest ping) IPs from all known Cloudflare WARP /24 ranges
+# Cloudflare WARP Endpoint Finder (Full /24 Scan, All 256 IPs per Range)
+# Silent + Progress Bar, Top 4 by lowest ping
 
-# All known Cloudflare WARP IPv4 /24 ranges (add/update as needed)
 ranges=(
   "162.159.192"
   "162.159.193"
@@ -17,34 +16,27 @@ ranges=(
   "188.114.103"
 )
 
-max_ping=20      # ms, only keep IPs with ping <= this value
-max_jobs=64      # Parallel jobs
+max_ping=20        # ms threshold
+max_jobs=64        # Parallel jobs (adjust if needed)
 tmpfile=$(mktemp)
-total_ips=0
-ips=()
-
-# Prepare full list of IPs to test (all 256 IPs per range)
-for range in "${ranges[@]}"; do
-  for last_octet in $(seq 0 255); do
-    ips+=("$range.$last_octet")
-    ((total_ips++))
-  done
-done
+total_ips=$((${#ranges[@]} * 256))
+tested=0
 
 # Progress bar function
-print_progress() {
-  percent=$(awk "BEGIN {printf \"%.1f\", ($1/$2)*100}")
+progress_bar() {
+  percent=$(( 100 * $1 / $2 ))
   bar_size=40
-  filled=$(awk "BEGIN {printf \"%d\", ($1/$2)*$bar_size}")
+  filled=$(( bar_size * $1 / $2 ))
+  empty=$(( bar_size - filled ))
   bar=$(printf "%0.s#" $(seq 1 $filled))
-  empty=$(printf "%0.s-" $(seq 1 $((bar_size-filled))))
-  printf "\rProgress: [%s%s] %s%% (%d/%d)" "$bar" "$empty" "$percent" "$1" "$2"
+  spaces=$(printf "%0.s-" $(seq 1 $empty))
+  printf "\rProgress: [%s%s] %d%% (%d/%d)" "$bar" "$spaces" "$percent" "$1" "$2"
 }
 
-# Silent ping function: $1=IP
+# Ping function (silent)
 ping_ip() {
   ip="$1"
-  ping_time=$(ping -c 1 -W 1 "$ip" 2>&1 | grep 'time=' | awk -F'time=' '{print $2}' | awk '{print $1}')
+  ping_time=$(ping -c 1 -W 1 "$ip" 2>/dev/null | grep 'time=' | awk -F'time=' '{print $2}' | awk '{print $1}')
   if [[ -n "$ping_time" ]]; then
     ping_int=${ping_time%.*}
     if (( ping_int <= max_ping )); then
@@ -57,25 +49,25 @@ export -f ping_ip
 export tmpfile
 export max_ping
 
-# Main loop: silent, with progress bar
-current=0
-for ip in "${ips[@]}"; do
-  ((current++))
-  # Launch ping in background
-  ping_ip "$ip" &
-  # Progress bar (every 50 IPs)
-  if (( current % 50 == 0 || current == total_ips )); then
-    print_progress "$current" "$total_ips"
-  fi
-  # Limit parallel jobs
-  while (( $(jobs -r | wc -l) >= max_jobs )); do
-    sleep 0.05
+# Main execution
+for range in "${ranges[@]}"; do
+  for i in $(seq 0 255); do
+    ip="$range.$i"
+    ping_ip "$ip" &
+    ((tested++))
+    # Progress bar every 25 IPs
+    if (( tested % 25 == 0 || tested == total_ips )); then
+      progress_bar "$tested" "$total_ips"
+    fi
+    # Limit parallel jobs
+    while (( $(jobs -r | wc -l) >= max_jobs )); do
+      sleep 0.02
+    done
   done
 done
 
-# Final progress update and wait for all jobs
 wait
-print_progress "$total_ips" "$total_ips"
+progress_bar "$total_ips" "$total_ips"
 echo
 
 echo -e "\nTop 4 Best WARP Endpoints (ping ≤ ${max_ping}ms):"
