@@ -1,4 +1,4 @@
-# Cloudflare WARP Endpoint Finder
+# Cloudflare WARP Endpoint Finder (`warpip.sh`)
 
 A blazing fast, parallel Bash script to find the **4 best (lowest ping) Cloudflare WARP endpoints** across all major global IPv4 ranges.  
 Perfect for users in Iran and worldwide, covering all official Cloudflare WARP IPv4 blocks.
@@ -10,13 +10,13 @@ Perfect for users in Iran and worldwide, covering all official Cloudflare WARP I
 Just run this command in your terminal – no need to download anything or clone the repo!
 
 ```bash
-bash <(curl -s https://raw.githubusercontent.com/Shellgate/warp-endpoint/main/best_warp_endpoints.sh)
+bash <(curl -s https://raw.githubusercontent.com/Shellgate/warp-endpoint/main/warpip.sh)
 ```
 
 Or using `wget`:
 
 ```bash
-bash <(wget -qO- https://raw.githubusercontent.com/Shellgate/warp-endpoint/main/best_warp_endpoints.sh)
+bash <(wget -qO- https://raw.githubusercontent.com/Shellgate/warp-endpoint/main/warpip.sh)
 ```
 
 ---
